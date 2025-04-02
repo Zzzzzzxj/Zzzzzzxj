@@ -20,7 +20,7 @@ def scoreEvaluationFunction(currentGameState):
 
 class Q2_Agent(Agent):
 
-    def __init__(self, evalFn = 'scoreEvaluationFunction', depth = '2'):
+    def __init__(self, evalFn = 'scoreEvaluationFunction', depth = '1'):
         self.index = 0 # Pacman is always agent index 0
         self.evaluationFunction = util.lookup(evalFn, globals())
         self.depth = int(depth)
@@ -86,19 +86,19 @@ class Q2_Agent(Agent):
                                 # 检查预测位置与吃豆人的距离
                                 next_dist = manhattanDistance(pacman_pos, next_ghost_pos)
                                 if next_dist < 2:  # 预测会很近
-                                    score -= 3000  # 增加对预测危险的惩罚
+                                    score -= 2000
                         
                         # 根据距离设置不同的惩罚力度
                         if ghost_dist < 1:  # 直接相撞
-                            score -= 15000  # 增加极高惩罚
+                            score -= 10000  # 极高惩罚
                         elif ghost_dist < 2:  # 非常近
-                            score -= 7000   # 增加惩罚
+                            score -= 5000
                         elif ghost_dist < 3:  # 较近
-                            score -= 2000   # 增加惩罚
+                            score -= 1000
                         elif ghost_dist < 4:  # 中等距离
-                            score -= 500    # 增加惩罚
+                            score -= 200
                         elif ghost_dist < 5:  # 较远但仍需注意
-                            score -= 100    # 增加惩罚
+                            score -= 50
                         # 当鬼魂距离足够远时，减少对食物追求的限制
                         else:
                             # 鬼魂距离安全，增加对食物的重视
@@ -153,18 +153,7 @@ class Q2_Agent(Agent):
                     pacman_pos = succ.getPacmanPosition()
                     ghost_pos = succ.getGhostPosition(agentIndex)
                     dist = manhattanDistance(pacman_pos, ghost_pos)
-                    # 鬼怪倾向于接近吃豆人，但考虑更复杂的行为模式
-                    # 考虑鬼怪之间的协作，避免重叠
-                    other_ghosts_dist = float('inf')
-                    for other_ghost_idx in range(1, state.getNumAgents()):
-                        if other_ghost_idx != agentIndex:
-                            other_ghost_pos = state.getGhostPosition(other_ghost_idx)
-                            other_ghosts_dist = min(other_ghosts_dist, 
-                                                   manhattanDistance(ghost_pos, other_ghost_pos))
-                    
-                    # 如果太靠近其他鬼怪，稍微降低评分以鼓励分散
-                    if other_ghosts_dist < 2:
-                        return dist + 1
+                    # 鬼怪倾向于接近吃豆人
                     return dist
                 
                 actions = sorted(actions, key=ghost_action_score)
@@ -343,39 +332,9 @@ class Q2_Agent(Agent):
                 pacman_pos = succ.getPacmanPosition()
                 min_ghost_dist = float('inf')
                 
-                # 更精确地评估鬼怪威胁
-                ghost_threat = 0
-                for i, ghost_pos in enumerate(succ.getGhostPositions()):
+                for ghost_pos in succ.getGhostPositions():
                     dist = manhattanDistance(pacman_pos, ghost_pos)
                     min_ghost_dist = min(min_ghost_dist, dist)
-                    
-                    # 考虑鬼怪的移动方向和速度
-                    if hasattr(self, 'prev_ghost_positions') and len(self.prev_ghost_positions) > i:
-                        prev_pos = self.prev_ghost_positions[i]
-                        if prev_pos != ghost_pos:  # 鬼魂在移动
-                            # 计算鬼魂移动方向
-                            dx = ghost_pos[0] - prev_pos[0]
-                            dy = ghost_pos[1] - prev_pos[1]
-                            # 预测下一个位置
-                            next_ghost_x = ghost_pos[0] + dx
-                            next_ghost_y = ghost_pos[1] + dy
-                            next_ghost_pos = (next_ghost_x, next_ghost_y)
-                            # 检查预测位置与吃豆人的距离
-                            next_dist = manhattanDistance(pacman_pos, next_ghost_pos)
-                            if next_dist < dist:  # 鬼怪正在接近
-                                ghost_threat += (1.0 / (next_dist + 0.1)) * 3  # 增加威胁值
-                    
-                    # 根据距离计算威胁值 - 增加威胁评估
-                    if dist < 1:
-                        ghost_threat += 150  # 增加威胁值
-                    elif dist < 2:
-                        ghost_threat += 80   # 增加威胁值
-                    elif dist < 3:
-                        ghost_threat += 20   # 增加威胁值
-                    elif dist < 4:
-                        ghost_threat += 8    # 增加威胁值
-                    elif dist < 5:
-                        ghost_threat += 2    # 增加威胁值
                 
                 # 考虑食物因素
                 food_score = 0
@@ -384,39 +343,22 @@ class Q2_Agent(Agent):
                 if food_list:
                     min_food_dist = min([manhattanDistance(pacman_pos, food) for food in food_list])
                     # 增加食物权重，但仍保持安全第一
-                    food_score = 25.0 / (min_food_dist + 1)  # 增加食物吸引力
+                    food_score = 20.0 / (min_food_dist + 1)  # 食物越近分数越高
                     
                     # 根据剩余食物数量调整策略
                     remaining_food = len(food_list)
                     if remaining_food < 10:
-                        food_score *= (10 - remaining_food) / 1.5  # 食物少时更积极
-                
-                # 考虑胶囊的价值 - 大幅增加胶囊价值
-                capsule_score = 0
-                capsules = succ.getCapsules()
-                if capsules:
-                    min_capsule_dist = min([manhattanDistance(pacman_pos, capsule) for capsule in capsules])
-                    # 胶囊比食物更有价值，特别是当鬼怪靠近时
-                    capsule_score = 60.0 / (min_capsule_dist + 1)  # 增加胶囊基础价值
-                    if min_ghost_dist < 5:  # 鬼怪靠近时胶囊更有价值
-                        capsule_score *= 3  # 增加胶囊在危险时的价值
+                        food_score *= (10 - remaining_food) / 2  # 食物少时更积极
                 
                 # 安全度计算：鬼魂距离足够远时更重视食物
-                if min_ghost_dist > 4 and ghost_threat < 5:
-                    safety = min_ghost_dist * 0.5 + food_score * 0.3 + capsule_score * 0.3  # 增加胶囊权重
+                if min_ghost_dist > 4:
+                    safety = min_ghost_dist * 0.7 + food_score * 0.3  # 安全情况下增加食物权重
                 else:
-                    safety = min_ghost_dist * 2.5 - ghost_threat + food_score * 0.1 + capsule_score * 0.5  # 增加安全权重和胶囊权重
+                    safety = min_ghost_dist + food_score/10  # 危险情况下优先安全
                 
                 # 避免原地打转
                 if hasattr(self, "lastAction") and action == Actions.reverseDirection(self.lastAction):
-                    safety -= 1.0  # 增加惩罚
-                
-                # 避免重复访问相同位置
-                if hasattr(self, 'visited_positions'):
-                    if pacman_pos in self.visited_positions:
-                        visits = self.visited_positions[pacman_pos]
-                        if visits > 2:  # 如果访问次数过多
-                            safety -= visits * 0.5  # 增加惩罚以避免循环
+                    safety -= 0.5
                 
                 action_safety.append((action, safety))
             
@@ -433,55 +375,13 @@ class Q2_Agent(Agent):
             import time
             # 根据游戏状态动态调整搜索深度
             food_count = len(gameState.getFood().asList())
-            ghost_distances = [manhattanDistance(gameState.getPacmanPosition(), ghost_pos) 
-                              for ghost_pos in gameState.getGhostPositions()]
-            min_ghost_dist = min(ghost_distances) if ghost_distances else float('inf')
-            
-            # 根据鬼怪距离和食物数量动态调整搜索深度
-            if min_ghost_dist < 3:  # 鬼怪非常近，减少搜索深度以快速反应
-                depth = max(self.depth - 1, 1)
-            elif food_count < 5:  # 食物少时可以搜索更深
+            if food_count < 5:  # 食物少时可以搜索更深
                 depth = min(self.depth + 1, 4)
             elif food_count > 20:  # 食物多时减少搜索深度
                 depth = max(self.depth - 1, 2)
             else:
                 depth = self.depth
                 
-            # 检查是否有胶囊，如果有且鬼怪近，优先考虑吃胶囊
-            capsules = gameState.getCapsules()
-            if capsules and min_ghost_dist < 6:  # 增加胶囊检测范围
-                pacman_pos = gameState.getPacmanPosition()
-                min_capsule_dist = min([manhattanDistance(pacman_pos, capsule) for capsule in capsules])
-                if min_capsule_dist < 4:  # 增加胶囊检测距离
-                    # 找到朝向最近胶囊的动作
-                    actions = gameState.getLegalActions(0)
-                    best_action = None
-                    best_dist = float('inf')
-                    for action in actions:
-                        succ = gameState.generateSuccessor(0, action)
-                        new_pos = succ.getPacmanPosition()
-                        for capsule in capsules:
-                            dist = manhattanDistance(new_pos, capsule)
-                            if dist < best_dist:
-                                best_dist = dist
-                                best_action = action
-                    if best_action:
-                        # 检查该动作是否安全
-                        succ = gameState.generateSuccessor(0, best_action)
-                        new_pos = succ.getPacmanPosition()
-                        is_safe = True
-                        for ghost_pos in succ.getGhostPositions():
-                            if manhattanDistance(new_pos, ghost_pos) < 1.5:
-                                is_safe = False
-                                break
-                        if is_safe:
-                            return best_action
-            
-            # 特殊处理trappedClassic布局 - 检测是否在困境中
-            if "trappedClassic" in str(gameState.getFood()) or min_ghost_dist < 2:
-                # 在困境中时，使用更保守的策略
-                return self.get_safest_action(gameState)
-            
             return self.alpha_beta_search(gameState, depth)
         except Exception as e:
             # 如果出现异常，返回最安全的动作
